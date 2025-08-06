@@ -1,0 +1,4 @@
+root ::=  thinkingblock bool
+thinkingblock ::= "<think>" anychar* "</think>\n"
+bool ::= "True" | "False"
+anychar ::= [^<]

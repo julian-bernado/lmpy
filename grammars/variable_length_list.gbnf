@@ -1,0 +1,6 @@
+root ::= thinkingblock "[" (item lateritems*)? "]"
+thinkingblock ::= "<think>" anychar* "</think>" "\n"
+lateritems ::= "," item
+item ::= int
+anychar ::= [^<]
+int ::= [0-9]+
