@@ -1,0 +1,8 @@
+root ::= thinkingBlock "[" (item laterItems*)? "]"
+thinkingBlock ::= thinkingStart anychar* thinkingEnd
+thinkingStart ::= "<|channel|>analysis<|message|>" | "<think>"
+thinkingEnd ::= "<|end|><|start|>assistant<|channel|>final<|message|>\n" | "</think>\n"
+laterItems ::= ", " item
+item ::= int
+anychar ::= [^<]
+int ::= [0-9]+

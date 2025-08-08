@@ -29,13 +29,13 @@ def test_grammar_constraints(model_path, model_name, model_type, verbose=False):
             llm = Client(
                 base_url=server.base_url,
                 system_prompt="You are a helpful assistant.",
-                timeout=30.0
+                timeout=60.0
             )
             
-            prompt = "Is Python a good programming language? After thinking through it, respond with either True or False"
+            prompt = "Which of the numbers from 1 to 30 are prime? Respond in a bracketed list like [num1, num2, num3, ...]"
             
             # This test requires a grammar file and llama.cpp compiled with grammar support
-            grammar_file = "grammars/analysis_bool.gbnf"  # Assuming this exists
+            grammar_file = "grammars/numerical_list.gbnf"  # Assuming this exists
             
             answer = llm.answer(
                 prompt,
