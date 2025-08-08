@@ -11,3 +11,6 @@ wheels/
 
 # never push models
 models/
+
+# mac
+.DS_Store

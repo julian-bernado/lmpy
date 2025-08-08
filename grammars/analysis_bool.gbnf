@@ -1,0 +1,4 @@
+root ::=  thinkingblock bool
+thinkingblock ::= "<|channel|>analysis<|message|>" anychar* "<|end|><|start|>assistant<|channel|>final<|message|>\n"
+bool ::= "True" | "False"
+anychar ::= [^<]

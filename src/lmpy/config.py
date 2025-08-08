@@ -2,7 +2,7 @@
 """
 Environment variables:
   - LMPY_BASE_URL  (default: "http://127.0.0.1:8080")
-  - LMPY_TIMEOUT   (default: "30" seconds; float accepted)
+  - LMPY_TIMEOUT   (default: "60" seconds; float accepted)
 """
 
 from dataclasses import dataclass
@@ -50,6 +50,6 @@ def load(**overrides) -> Config:
     )
     timeout = overrides.get(
         "timeout",
-        _parse_timeout(os.getenv("LMPY_TIMEOUT"), 30.0),
+        _parse_timeout(os.getenv("LMPY_TIMEOUT"), 60.0),
     )
     return Config(base_url=_normalize_base_url(str(base_url)), timeout=float(timeout))

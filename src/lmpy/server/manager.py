@@ -63,6 +63,7 @@ class LlamaServer:
     env: Optional[dict] = None
     attach: bool = True
     log_to: Optional[Pathish] = None
+    verbose: bool = False  # New parameter to control output verbosity
 
     _proc: Optional[subprocess.Popen] = None
 
@@ -110,6 +111,9 @@ class LlamaServer:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             f = open(log_path, "a", buffering=1)
             stdout = stderr = f
+        elif not self.verbose:
+            # If not verbose and no log file specified, suppress output
+            stdout = stderr = subprocess.DEVNULL
 
         creationflags = 0
         if platform.system() == "Windows":

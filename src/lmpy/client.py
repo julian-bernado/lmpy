@@ -30,6 +30,7 @@ import tqdm
 
 from lmpy.backends.llamacpp_http import LlamacppHTTP, LmpyHTTPError, LmpyTimeoutError
 from lmpy.config import load as load_config
+from lmpy.message_builders import create_message_builder, BuilderConfig, MessageBuilder
 
 
 Message = Dict[str, str]
@@ -45,23 +46,51 @@ class Client:
         base_url: Optional[str] = None,
         timeout: Optional[float] = None,
         system_prompt: str = "You are a concise, helpful assistant.",
+        # New Harmony-specific options
+        reasoning_effort: str = "medium",  # high/medium/low
+        developer_instructions: Optional[str] = None,  # Override for Harmony models
+        enable_builtin_python: bool = False,
+        enable_builtin_browser: bool = False,
     ):
         """
         Args:
             base_url: Root URL of llama.cpp server (e.g., "http://127.0.0.1:8080").
             timeout:  Per-request timeout in seconds.
-            system_prompt: Included as the first message for string prompts.
+            system_prompt: Included as the first message for string prompts (standard models)
+                          or used as developer instructions for Harmony models if developer_instructions not provided.
+            reasoning_effort: Reasoning level for Harmony models (high/medium/low).
+            developer_instructions: Explicit instructions for Harmony models (takes precedence over system_prompt).
+            enable_builtin_python: Enable built-in Python tool for Harmony models.
+            enable_builtin_browser: Enable built-in browser tool for Harmony models.
         """
         cfg = load_config(
             **({k: v for k, v in {"base_url": base_url, "timeout": timeout}.items() if v is not None})
         )
         self._http = LlamacppHTTP(cfg)
         self._system_prompt = system_prompt
+        
+        # Harmony configuration
+        self._builder_config = BuilderConfig(
+            reasoning_effort=reasoning_effort,
+            enable_builtin_python=enable_builtin_python,
+            enable_builtin_browser=enable_builtin_browser,
+        )
+        self._developer_instructions = developer_instructions
+        
+        # Message builder will be created lazily when we know the model type
+        self._message_builder: Optional[MessageBuilder] = None
 
     # -------- configuration --------
 
     def set_system_prompt(self, text: str) -> None:
         self._system_prompt = text
+
+    def _get_message_builder(self) -> MessageBuilder:
+        """Get or create the appropriate message builder for this model."""
+        if self._message_builder is None:
+            model_id = self._http._get_model_id()
+            self._message_builder = create_message_builder(model_id, self._builder_config)
+        return self._message_builder
 
     # -------- utilities --------
 
@@ -102,8 +131,16 @@ class Client:
         """
         One-shot completion that returns the final text (no streaming).
         Accepts either a plain string or a full OpenAI-style messages list.
+        
+        For Harmony models, automatically extracts the 'final' channel content.
         """
-        messages = _coerce_messages(prompt_or_messages, self._system_prompt)
+        builder = self._get_message_builder()
+        messages = builder.build_messages(
+            prompt_or_messages, 
+            self._system_prompt,
+            self._developer_instructions
+        )
+        
         resp = self._http.chat(
             messages,
             temperature=temperature,
@@ -117,7 +154,9 @@ class Client:
             extra=extra,
         )
         try:
-            return resp["choices"][0]["message"]["content"]
+            raw_content = resp["choices"][0]["message"]["content"]
+            # Use builder to extract final response (handles Harmony channels)
+            return builder.extract_final_response(raw_content)
         except Exception as e:  # pragma: no cover
             raise LmpyHTTPError(500, f"Unexpected response shape: {resp}") from e
 
@@ -138,8 +177,17 @@ class Client:
         """
         Streaming completion. Yields token deltas (strings).
         Accepts either a plain string or a messages list.
+        
+        Note: For Harmony models, this yields raw tokens which may include
+        channel markers and analysis content. Use answer() for clean final responses.
         """
-        messages = _coerce_messages(prompt_or_messages, self._system_prompt)
+        builder = self._get_message_builder()
+        messages = builder.build_messages(
+            prompt_or_messages,
+            self._system_prompt,
+            self._developer_instructions
+        )
+        
         yield from self._http.chat_stream(
             messages,
             temperature=temperature,
@@ -198,23 +246,3 @@ class Client:
         return answers
 
 
-# ---------- helpers ----------
-
-def _coerce_messages(prompt_or_messages: Union[str, Messages], system_prompt: Optional[str]) -> List[Message]:
-    """
-    Normalize input into an OpenAI-style messages list.
-    - If a string, prepend system prompt (if provided) and wrap as a single user message.
-    - If already messages, return as list(messages).
-    """
-    if isinstance(prompt_or_messages, str):
-        msgs: List[Message] = []
-        if system_prompt:
-            msgs.append({"role": "system", "content": system_prompt})
-        msgs.append({"role": "user", "content": prompt_or_messages})
-        return msgs
-
-    msgs = list(prompt_or_messages)
-    for m in msgs:
-        if not isinstance(m, dict) or "role" not in m or "content" not in m:
-            raise ValueError("Each message must be a dict with 'role' and 'content' keys.")
-    return msgs
